@@ -114,9 +114,13 @@ rule("When the game isn't initialised, initialise global variables and effects")
 		Set Global Variable(outOfBoundsCooldownSeconds, 1);
 		Set Global Variable(spawnRadius, 8);
 		Set Global Variable(deathRadius, 13);
-		Create Effect(All Players(All Teams), Light Shaft, White, Global Variable(wellPosition), Global Variable(arenaRadius),
+		disabled Create Effect(All Players(All Teams), Light Shaft, White, Global Variable(wellPosition), Global Variable(arenaRadius),
 			Visible To Position and Radius);
-		Create Effect(All Players(All Teams), Light Shaft, Red, Global Variable(wellPosition), Global Variable(deathRadius),
+		Create Effect(All Players(All Teams), Ring, White, Global Variable(wellPosition), Global Variable(arenaRadius),
+			Visible To Position and Radius);
+		disabled Create Effect(All Players(All Teams), Light Shaft, Red, Global Variable(wellPosition), Global Variable(deathRadius),
+			Visible To Position and Radius);
+		Create Effect(All Players(All Teams), Ring, Red, Global Variable(wellPosition), Global Variable(deathRadius),
 			Visible To Position and Radius);
 	}
 }
