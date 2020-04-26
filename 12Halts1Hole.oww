@@ -1,0 +1,367 @@
+settings
+{
+	main
+	{
+		Description: "12 Halts 1 Hole by LBSM#2807. Use Orisa's Halt ability to pull enemies into the Ilios well. Players spawn with temporary invulnerability, indicated by an aura effect. Players must be within the white area to use Halt. Players that leave the white area and re-enter will have to wait for a short cooldown before being able to use Halt again. Players that leave the red area will be thrown in the well. Web link: <https://workshop.elohell.gg/Zz1q6SVc5hdxFu3>"
+	}
+
+	lobby
+	{
+		Allow Players Who Are In Queue: Yes
+		Map Rotation: Paused
+		Max Spectators: 6
+		Return To Lobby: Never
+		Swap Teams After Match: No
+	}
+
+	modes
+	{
+		Deathmatch
+		{
+			Game Length In Minutes: 15
+			Score To Win: 50
+			Self Initiated Respawn: Off
+
+			enabled maps
+			{
+				Ilios Well
+			}
+		}
+
+		General
+		{
+			Allow Hero Switching: Off
+			Enemy Health Bars: Off
+			Game Mode Start: Immediately
+			Hero Limit: Off
+			Kill Cam: Off
+			Respawn As Random Hero: On
+			Respawn Time Scalar: 0%
+			Spawn Health Packs: Disabled
+		}
+	}
+
+	heroes
+	{
+		General
+		{
+			Orisa
+			{
+				Fortify: Off
+				Halt! Cooldown Time: 0%
+				Primary Fire: Off
+				Protective Barrier: Off
+				Quick Melee: Off
+				Receive Headshots Only: On
+				Ultimate Ability Supercharger: Off
+			}
+
+			enabled heroes
+			{
+				Orisa
+			}
+		}
+	}
+}
+
+variables
+{
+	global:
+		0: wellPosition
+		1: arenaRadius
+		2: spawnInvulnerabilitySeconds
+		3: outOfBoundsCooldownSeconds
+		4: spawnRadius
+		5: deathRadius
+		6: initialised
+
+	player:
+		0: spawnEffect
+		1: inBoundsTime
+		2: spawnTime
+		3: spawnAngleDegrees
+		5: facingWell
+		6: spawnLocation
+		7: initialised
+}
+
+disabled rule("12 Halts 1 Hole by LBSM#2807")
+{
+	event
+	{
+		Ongoing - Global;
+	}
+}
+
+rule("When the game isn't initialised, initialise global variables and effects")
+{
+	event
+	{
+		Ongoing - Global;
+	}
+
+	conditions
+	{
+		Global Variable(initialised) != True;
+	}
+
+	actions
+	{
+		Set Global Variable(initialised, True);
+		Set Global Variable(wellPosition, Vector(-208.410, 0, -16.380));
+		Set Global Variable(arenaRadius, 9);
+		Set Global Variable(spawnInvulnerabilitySeconds, 3);
+		Set Global Variable(outOfBoundsCooldownSeconds, 1);
+		Set Global Variable(spawnRadius, 8);
+		Set Global Variable(deathRadius, 13);
+		Create Effect(All Players(All Teams), Light Shaft, White, Global Variable(wellPosition), Global Variable(arenaRadius),
+			Visible To Position and Radius);
+		Create Effect(All Players(All Teams), Light Shaft, Red, Global Variable(wellPosition), Global Variable(deathRadius),
+			Visible To Position and Radius);
+	}
+}
+
+rule("When a player isn't initialised, initialise their player variables")
+{
+	event
+	{
+		Ongoing - Each Player;
+		All;
+		All;
+	}
+
+	conditions
+	{
+		Player Variable(Event Player, initialised) != True;
+	}
+
+	actions
+	{
+		Set Player Variable(Event Player, initialised, True);
+		Set Player Variable(Event Player, facingWell, True);
+		Set Player Variable(Event Player, spawnLocation, Null);
+	}
+}
+
+rule("When a player spawns, teleport them to the arena, give them an aura, and mark the time they spawned")
+{
+	event
+	{
+		Ongoing - Each Player;
+		All;
+		All;
+	}
+
+	conditions
+	{
+		Has Spawned(Event Player) == True;
+		Is Alive(Event Player) == True;
+	}
+
+	actions
+	{
+		Set Move Speed(Event Player, 100);
+		Set Player Variable(Event Player, spawnTime, Total Time Elapsed);
+		Set Player Variable(Event Player, spawnAngleDegrees, Multiply(30, Random Integer(0, 11)));
+		Set Player Variable(Event Player, spawnLocation, Nearest Walkable Position(Add(Global Variable(wellPosition), Vector(Multiply(
+			Global Variable(spawnRadius), Sine From Degrees(Player Variable(Event Player, spawnAngleDegrees))), 0, Multiply(
+			Global Variable(spawnRadius), Cosine From Degrees(Player Variable(Event Player, spawnAngleDegrees)))))));
+		Teleport(Event Player, Player Variable(Event Player, spawnLocation));
+		Set Player Variable(Event Player, facingWell, False);
+		If(Compare(Player Variable(Event Player, spawnEffect), !=, Null));
+			Destroy Effect(Player Variable(Event Player, spawnEffect));
+		End;
+		Create Effect(All Players(All Teams), Good Aura, White, Event Player, 1, Visible To Position and Radius);
+		Set Player Variable(Event Player, spawnEffect, Last Created Entity);
+	}
+}
+
+rule("When a player is teleported to the arena, set them facing towards the well (and keep trying in case it doesn't work first time)")
+{
+	event
+	{
+		Ongoing - Each Player;
+		All;
+		All;
+	}
+
+	conditions
+	{
+		And(Compare(Player Variable(Event Player, facingWell), !=, True), And(Compare(Distance Between(Position Of(Event Player),
+			Player Variable(Event Player, spawnLocation)), <=, 0.100), True)) == True;
+	}
+
+	actions
+	{
+		Set Facing(Event Player, Direction Towards(Position Of(Event Player), Vector(X Component Of(Global Variable(wellPosition)),
+			Y Component Of(Position Of(Event Player)), Z Component Of(Global Variable(wellPosition)))), To World);
+		Wait(0.010, Abort When False);
+		Loop If(Compare(Angle Between Vectors(Facing Direction Of(Event Player), Direction Towards(Position Of(Event Player), Vector(
+			X Component Of(Global Variable(wellPosition)), Y Component Of(Position Of(Event Player)), Z Component Of(Global Variable(
+			wellPosition))))), >, 5));
+		Set Player Variable(Event Player, facingWell, True);
+	}
+}
+
+rule("When a player enters the arena, mark the time they entered")
+{
+	event
+	{
+		Ongoing - Each Player;
+		All;
+		All;
+	}
+
+	conditions
+	{
+		Distance Between(Position Of(Event Player), Vector(X Component Of(Global Variable(wellPosition)), Y Component Of(Position Of(
+			Event Player)), Z Component Of(Global Variable(wellPosition)))) <= Global Variable(arenaRadius);
+	}
+
+	actions
+	{
+		Set Player Variable(Event Player, inBoundsTime, Total Time Elapsed);
+	}
+}
+
+rule("When a player leaves the arena, clear the time they entered")
+{
+	event
+	{
+		Ongoing - Each Player;
+		All;
+		All;
+	}
+
+	conditions
+	{
+		Distance Between(Position Of(Event Player), Vector(X Component Of(Global Variable(wellPosition)), Y Component Of(Position Of(
+			Event Player)), Z Component Of(Global Variable(wellPosition)))) > Global Variable(arenaRadius);
+	}
+
+	actions
+	{
+		Set Player Variable(Event Player, inBoundsTime, Null);
+	}
+}
+
+rule("When a player has recently spawned or recently entered the arena, disable their abilities")
+{
+	event
+	{
+		Ongoing - Each Player;
+		All;
+		All;
+	}
+
+	conditions
+	{
+		And(And(Compare(Player Variable(Event Player, spawnTime), !=, Null), Compare(Subtract(Total Time Elapsed, Player Variable(
+			Event Player, spawnTime)), >, Global Variable(spawnInvulnerabilitySeconds))), And(Compare(Player Variable(Event Player,
+			inBoundsTime), !=, Null), Compare(Subtract(Total Time Elapsed, Player Variable(Event Player, inBoundsTime)), >,
+			Global Variable(outOfBoundsCooldownSeconds)))) == False;
+	}
+
+	actions
+	{
+		Set Secondary Fire Enabled(Event Player, False);
+		Disallow Button(Event Player, Secondary Fire);
+	}
+}
+
+rule("When a player has not recently spawned and has not recently entered the arena, enable their abilities")
+{
+	event
+	{
+		Ongoing - Each Player;
+		All;
+		All;
+	}
+
+	conditions
+	{
+		And(And(Compare(Player Variable(Event Player, spawnTime), !=, Null), Compare(Subtract(Total Time Elapsed, Player Variable(
+			Event Player, spawnTime)), >, Global Variable(spawnInvulnerabilitySeconds))), And(Compare(Player Variable(Event Player,
+			inBoundsTime), !=, Null), Compare(Subtract(Total Time Elapsed, Player Variable(Event Player, inBoundsTime)), >,
+			Global Variable(outOfBoundsCooldownSeconds)))) == True;
+	}
+
+	actions
+	{
+		Set Secondary Fire Enabled(Event Player, True);
+		Allow Button(Event Player, Secondary Fire);
+	}
+}
+
+rule("When a player has recently spawned, give them the phased out status")
+{
+	event
+	{
+		Ongoing - Each Player;
+		All;
+		All;
+	}
+
+	conditions
+	{
+		And(Compare(Player Variable(Event Player, spawnTime), !=, Null), Compare(Subtract(Total Time Elapsed, Player Variable(Event Player,
+			spawnTime)), >, Global Variable(spawnInvulnerabilitySeconds))) == False;
+	}
+
+	actions
+	{
+		Set Status(Event Player, Null, Phased Out, 9999);
+	}
+}
+
+rule("When a player has not recently spawned, clear their phased out status")
+{
+	event
+	{
+		Ongoing - Each Player;
+		All;
+		All;
+	}
+
+	conditions
+	{
+		And(Compare(Player Variable(Event Player, spawnTime), !=, Null), Compare(Subtract(Total Time Elapsed, Player Variable(Event Player,
+			spawnTime)), >, Global Variable(spawnInvulnerabilitySeconds))) == True;
+	}
+
+	actions
+	{
+		Clear Status(Event Player, Phased Out);
+		Destroy Effect(Player Variable(Event Player, spawnEffect));
+		Set Player Variable(Event Player, spawnEffect, Null);
+	}
+}
+
+rule("When a player has not recently spawned and exceeds the death radius, teleport them inside the well")
+{
+	event
+	{
+		Ongoing - Each Player;
+		All;
+		All;
+	}
+
+	conditions
+	{
+		And(Compare(Distance Between(Position Of(Event Player), Vector(X Component Of(Global Variable(wellPosition)), Y Component Of(
+			Position Of(Event Player)), Z Component Of(Global Variable(wellPosition)))), >, Global Variable(deathRadius)), And(Compare(
+			Player Variable(Event Player, spawnTime), !=, Null), Compare(Subtract(Total Time Elapsed, Player Variable(Event Player,
+			spawnTime)), >, Global Variable(spawnInvulnerabilitySeconds)))) == True;
+	}
+
+	actions
+	{
+		Wait(1, Abort When False);
+		Big Message(Event Player, Custom String("Stay close to the well", Null, Null, Null));
+		Set Move Speed(Event Player, 0);
+		Teleport(Event Player, Global Variable(wellPosition));
+		Apply Impulse(Event Player, Normalize(Velocity Of(Event Player)), Multiply(-1, Speed Of(Event Player)), To World,
+			Incorporate Contrary Motion);
+		Set Status(Event Player, Null, Phased Out, 9999);
+	}
+}
